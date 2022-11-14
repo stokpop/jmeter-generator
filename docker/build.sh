@@ -1,8 +1,38 @@
 #!/usr/bin/env bash
 
-DEV_DIR=/Users/pp/stokpop/git
-cp $DEV_DIR/jmeter-generator/target/generator-0.0.1-SNAPSHOT.jar app.jar
-cp $DEV_DIR/jmeter-dsl/target/jmeter-dsl-1.0-SNAPSHOT.jar jmeter-dsl.jar
-cp $DEV_DIR/openapi-generator/modules/openapi-generator-cli/target/openapi-generator-cli.jar openapi-generator-cli.jar
+set -o errexit
 
-docker build -t stokpop/jmeter-gen:0.0.1 .
+JAVA_VER=$(java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
+if [ "$JAVA_VER" != "17" ]; then echo "ERROR: use java 17 instead of $JAVA_VER"; exit 1; fi
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PROJECT_DIR=$(dirname "$SCRIPT_DIR")
+DEV_DIR=$(dirname "$PROJECT_DIR")
+
+cd "$PROJECT_DIR" || exit
+"./mvnw" clean package
+cp "$PROJECT_DIR/target/generator-0.0.1-SNAPSHOT.jar" "$SCRIPT_DIR/app.jar"
+
+# this needs to be the one that contains jmeter2 generator
+OPEN_API_DIR="$DEV_DIR/openapi-generator"
+cd "$OPEN_API_DIR" || exit
+GIT_BRANCH=$(git branch --show-current)
+if [ "$GIT_BRANCH" != "jmeter2" ]; then echo "ERROR: openapi-generator project not on jmeter2 branch but on $GIT_BRANCH"; exit 1; fi
+"./mvnw" -DskipTests clean package
+cp "$OPEN_API_DIR/modules/openapi-generator-cli/target/openapi-generator-cli.jar" "$SCRIPT_DIR/openapi-generator-cli.jar"
+
+JMETER_DSL_DIR="$DEV_DIR/jmeter-dsl"
+cd "$JMETER_DSL_DIR" || exit
+mvn clean package
+cp "$JMETER_DSL_DIR/target/jmeter-dsl-1.0.0-SNAPSHOT.jar" "$SCRIPT_DIR/jmeter-dsl.jar"
+
+cd "$SCRIPT_DIR" || exit
+docker buildx build --platform linux/amd64,linux/arm64 -t stokpop/jmeter-gen:0.0.1 --push .
+#docker build -t stokpop/jmeter-gen:0.0.1 .
+
+echo "removing files"
+if [ -f app.jar ]; then rm -v app.jar; fi
+if [ -f openapi-generator-cli.jar ]; then rm -v openapi-generator-cli.jar; fi
+if [ -f jmeter-dsl.jar ]; then rm -v jmeter-dsl.jar; fi
+echo "done"
+
