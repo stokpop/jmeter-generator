@@ -4,6 +4,8 @@ Docker image with a JMeter generator based on OpenAPI specs.
 
 This project contains a SpringBoot application and the docker image create scipts
 
+Sponsored by Rabobank.
+
 # Run
 
     docker run --rm -d -p 4756:8080 --name jmeter-gen stokpop/jmeter-gen:0.0.1
